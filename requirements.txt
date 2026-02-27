@@ -1,0 +1,38 @@
+# --- Manipulação de Dados e Computação Cientifica ---
+numpy
+pandas
+scipy
+polars          # Alternativa ultra-rapida ao Pandas
+openpyxl        # Leitura e escrita de arquivos Excel
+
+# --- Visualizacao de Dados ---
+matplotlib
+seaborn
+plotly          # Graficos interativos
+
+# --- Machine Learning Classico ---
+scikit-learn
+# xgboost
+# lightgbm
+# catboost
+
+# --- Deep Learning (Escolha um ou ambos, se necessario) ---
+# torch           # PyTorch
+# torchvision
+# tensorflow      # TensorFlow/Keras
+
+# --- Processamento de Linguagem Natural (NLP) e Audio ---
+# transformers    # Modelos da Hugging Face
+# datasets
+# spacy
+
+# --- Utilitários e Experimentacao ---
+jupyter         # Para rodar Notebooks
+tqdm            # Barras de progresso bonitas
+joblib          # Persistência de modelos e paralelismo
+python-dotenv   # Gerenciamento de variaveis de ambiente (.env)
+pyyaml          # Leitura de arquivos de configuração
+
+# --- MLOps e Tracking ---
+mlflow          # Para trackear experimentos
+wandb           # Weights & Biases (opcional, mas excelente)
