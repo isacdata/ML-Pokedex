@@ -6,6 +6,7 @@ import numpy as np
 from scipy.stats import shapiro, normaltest
 from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+import seaborn as sns
 
 def apply_scaling(df, columns, plot=False):
     scalers = {
@@ -173,7 +174,7 @@ def feature_selector(X, y, k=10, variance_threshold=0.0, correlation_threshold=0
             plt.xlabel("Score de Importância")
             plt.show()
 
-    elif regressor == True:
+    elif regressor == False:
         # --- 3. Importância via Random Forest (Captura relações não-lineares) ---
         model = RandomForestClassifier(n_estimators=100, random_state=42)
         model.fit(X_selection, y)
@@ -198,3 +199,95 @@ def feature_selector(X, y, k=10, variance_threshold=0.0, correlation_threshold=0
             plt.show()
 
     return X_selection[best_features], pd.DataFrame([report]), importances.sort_values(ascending=False)
+
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, 
+    confusion_matrix, roc_auc_score, precision_recall_curve, roc_curve, auc
+)
+
+from sklearn.preprocessing import label_binarize
+
+def summarize_model_performance(
+    y_test, 
+    y_pred, 
+    y_proba=None, 
+    multi_class=False, 
+    threshold_used=0.5,
+    class_names=None
+):
+    """
+    Calcula métricas e gera gráficos de Matriz de Confusão e Curva ROC.
+    """
+    results = {}
+
+    if class_names is not None:
+        class_names = list(class_names)
+    
+    # --- Cálculo de Métricas ---
+    results["Accuracy"] = accuracy_score(y_test, y_pred)
+    avg_type = 'weighted' if multi_class else 'binary'
+    results["Precision"] = precision_score(y_test, y_pred, average=avg_type)
+    results["Recall"] = recall_score(y_test, y_pred, average=avg_type)
+    results["F1 Score"] = f1_score(y_test, y_pred, average=avg_type)
+    
+    cm = confusion_matrix(y_test, y_pred)
+    results["Confusion Matrix"] = cm
+
+    # --- Setup dos Gráficos ---
+    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
+
+    # 1. Plot da Matriz de Confusão
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax[0], 
+                xticklabels=class_names if class_names else 'auto',
+                yticklabels=class_names if class_names else 'auto')
+    ax[0].set_title('Matriz de Confusão')
+    ax[0].set_xlabel('Predito')
+    ax[0].set_ylabel('Real')
+
+    # 2. ROC AUC e Curva ROC
+    if y_proba is not None:
+        if multi_class:
+            # Lógica Multiclasse (One-vs-Rest)
+            classes = np.unique(y_test)
+            y_test_bin = label_binarize(y_test, classes=classes)
+            n_classes = len(classes)
+            
+            fpr, tpr, roc_auc = {}, {}, {}
+            for i in range(n_classes):
+                fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_proba[:, i])
+                roc_auc[i] = auc(fpr[i], tpr[i])
+                ax[1].plot(fpr[i], tpr[i], label=f'Classe {classes[i]} (AUC = {roc_auc[i]:.2f})')
+            
+            results["ROC AUC"] = roc_auc_score(y_test, y_proba, multi_class="ovr", average="weighted")
+            ax[1].set_title(f'ROC Curve (Weighted AUC: {results["ROC AUC"]:.2f})')
+            
+        else:
+            # Lógica Binária
+            fpr, tpr, _ = roc_curve(y_test, y_proba)
+            roc_auc = auc(fpr, tpr)
+            results["ROC AUC"] = roc_auc
+            
+            ax[1].plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+            ax[1].set_title('Curva ROC')
+
+            # Encontrar melhor threshold (F1)
+            precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba)
+            f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-9)
+            best_index = np.argmax(f1_scores)
+            results["Best Threshold (F1)"] = thresholds[best_index] if best_index < len(thresholds) else 1.0
+            results["Threshold Used"] = threshold_used
+
+        ax[1].plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        ax[1].set_xlim([0.0, 1.0])
+        ax[1].set_ylim([0.0, 1.05])
+        ax[1].set_xlabel('Taxa de Falso Positivo (FPR)')
+        ax[1].set_ylabel('Taxa de Verdadeiro Positivo (TPR)')
+        ax[1].legend(loc="lower right")
+    else:
+        ax[1].text(0.5, 0.5, 'y_proba não fornecido', ha='center', va='center')
+        results["ROC AUC"] = None
+
+    plt.tight_layout()
+    plt.show()
+
+    return results
