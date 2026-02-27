@@ -4,6 +4,8 @@ from sklearn.preprocessing import MaxAbsScaler, QuantileTransformer, PowerTransf
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import shapiro, normaltest
+from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
 def apply_scaling(df, columns, plot=False):
     scalers = {
@@ -125,3 +127,74 @@ def quality_processor(df, columns, num_strategy='median', cat_strategy='most_fre
         })
 
     return df_clean, pd.DataFrame(report_data)
+
+def feature_selector(X, y, k=10, variance_threshold=0.0, correlation_threshold=0.9, plot=True, regressor=False):
+    """
+    Seleciona as melhores variáveis usando 3 filtros:
+    1. Variância (remove constantes)
+    2. Correlação (remove redundantes)
+    3. Model-Based Importance (Random Forest)
+    """
+    X_selection = X.copy()
+    initial_features = X_selection.columns.tolist()
+    
+    # --- 1. Filtro de Variância (Remove colunas que não mudam) ---
+    selector_var = VarianceThreshold(threshold=variance_threshold)
+    X_selection = pd.DataFrame(selector_var.fit_transform(X_selection), 
+                               columns=X_selection.columns[selector_var.get_support()])
+    
+    # --- 2. Filtro de Correlação (Remove redundância) ---
+    corr_matrix = X_selection.corr().abs()
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    to_drop = [column for column in upper.columns if any(upper[column] > correlation_threshold)]
+    X_selection = X_selection.drop(columns=to_drop)
+
+    if regressor == True:
+        # --- 3. Importância via Random Forest (Captura relações não-lineares) ---
+        model = RandomForestRegressor(n_estimators=100, random_state=42)
+        model.fit(X_selection, y)
+        
+        importances = pd.Series(model.feature_importances_, index=X_selection.columns)
+        best_features = importances.sort_values(ascending=False).head(k).index.tolist()
+        
+        # --- Relatório Final ---
+        removed_variance = list(set(initial_features) - set(selector_var.feature_names_in_))
+        report = {
+            "Original": len(initial_features),
+            "Removidas (Variância)": len(removed_variance),
+            "Removidas (Correlação)": len(to_drop),
+            "Selecionadas Final (K)": len(best_features)
+        }
+
+        if plot:
+            plt.figure(figsize=(10, 6))
+            importances.sort_values(ascending=True).tail(k).plot(kind='barh', color='teal')
+            plt.title(f"Top {k} Features - Importância Relativa")
+            plt.xlabel("Score de Importância")
+            plt.show()
+
+    elif regressor == True:
+        # --- 3. Importância via Random Forest (Captura relações não-lineares) ---
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X_selection, y)
+        
+        importances = pd.Series(model.feature_importances_, index=X_selection.columns)
+        best_features = importances.sort_values(ascending=False).head(k).index.tolist()
+        
+        # --- Relatório Final ---
+        removed_variance = list(set(initial_features) - set(selector_var.feature_names_in_))
+        report = {
+            "Original": len(initial_features),
+            "Removidas (Variância)": len(removed_variance),
+            "Removidas (Correlação)": len(to_drop),
+            "Selecionadas Final (K)": len(best_features)
+        }
+
+        if plot:
+            plt.figure(figsize=(10, 6))
+            importances.sort_values(ascending=True).tail(k).plot(kind='barh', color='teal')
+            plt.title(f"Top {k} Features - Importância Relativa")
+            plt.xlabel("Score de Importância")
+            plt.show()
+
+    return X_selection[best_features], pd.DataFrame([report]), importances.sort_values(ascending=False)
