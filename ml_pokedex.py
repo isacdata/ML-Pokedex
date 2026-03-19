@@ -200,11 +200,13 @@ def feature_selector(X, y, k=10, variance_threshold=0.0, correlation_threshold=0
 
     return X_selection[best_features], pd.DataFrame([report]), importances.sort_values(ascending=False)
 
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score, 
-    confusion_matrix, roc_auc_score, precision_recall_curve, roc_curve, auc
+    accuracy_score, precision_score, recall_score, f1_score, confusion_matrix,
+    roc_curve, auc, roc_auc_score, precision_recall_curve, average_precision_score
 )
-
 from sklearn.preprocessing import label_binarize
 
 def summarize_model_performance(
@@ -216,7 +218,7 @@ def summarize_model_performance(
     class_names=None
 ):
     """
-    Calcula métricas e gera gráficos de Matriz de Confusão e Curva ROC.
+    Calcula métricas e gera gráficos de Matriz de Confusão, Curva ROC e Curva Precision-Recall.
     """
     results = {}
 
@@ -234,7 +236,8 @@ def summarize_model_performance(
     results["Confusion Matrix"] = cm
 
     # --- Setup dos Gráficos ---
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
+    # Alterado para 3 colunas para acomodar a Curva PR
+    fig, ax = plt.subplots(1, 3, figsize=(20, 5))
 
     # 1. Plot da Matriz de Confusão
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax[0], 
@@ -244,7 +247,7 @@ def summarize_model_performance(
     ax[0].set_xlabel('Predito')
     ax[0].set_ylabel('Real')
 
-    # 2. ROC AUC e Curva ROC
+    # 2. ROC AUC e Curva PR
     if y_proba is not None:
         if multi_class:
             # Lógica Multiclasse (One-vs-Rest)
@@ -253,16 +256,30 @@ def summarize_model_performance(
             n_classes = len(classes)
             
             fpr, tpr, roc_auc = {}, {}, {}
+            precisions, recalls, pr_auc = {}, {}, {}
+            
             for i in range(n_classes):
+                # ROC
                 fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_proba[:, i])
                 roc_auc[i] = auc(fpr[i], tpr[i])
                 ax[1].plot(fpr[i], tpr[i], label=f'Classe {classes[i]} (AUC = {roc_auc[i]:.2f})')
+                
+                # Precision-Recall
+                precisions[i], recalls[i], _ = precision_recall_curve(y_test_bin[:, i], y_proba[:, i])
+                pr_auc[i] = average_precision_score(y_test_bin[:, i], y_proba[:, i])
+                ax[2].plot(recalls[i], precisions[i], label=f'Classe {classes[i]} (AP = {pr_auc[i]:.2f})')
             
+            # Métricas Globais Multiclasse
             results["ROC AUC"] = roc_auc_score(y_test, y_proba, multi_class="ovr", average="weighted")
+            results["Average Precision"] = average_precision_score(y_test_bin, y_proba, average="weighted")
+            
             ax[1].set_title(f'ROC Curve (Weighted AUC: {results["ROC AUC"]:.2f})')
+            ax[2].set_title(f'PR Curve (Weighted AP: {results["Average Precision"]:.2f})')
             
         else:
             # Lógica Binária
+            
+            # Curva ROC
             fpr, tpr, _ = roc_curve(y_test, y_proba)
             roc_auc = auc(fpr, tpr)
             results["ROC AUC"] = roc_auc
@@ -270,22 +287,41 @@ def summarize_model_performance(
             ax[1].plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
             ax[1].set_title('Curva ROC')
 
-            # Encontrar melhor threshold (F1)
+            # Curva Precision-Recall e Threshold
             precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba)
+            ap_score = average_precision_score(y_test, y_proba)
+            results["Average Precision"] = ap_score
+            
+            ax[2].plot(recalls, precisions, color='forestgreen', lw=2, label=f'PR curve (AP = {ap_score:.2f})')
+            ax[2].set_title('Curva Precision-Recall')
+
+            # Encontrar melhor threshold (F1)
             f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-9)
             best_index = np.argmax(f1_scores)
             results["Best Threshold (F1)"] = thresholds[best_index] if best_index < len(thresholds) else 1.0
             results["Threshold Used"] = threshold_used
 
+        # Formatação Eixo ROC (ax[1])
         ax[1].plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
         ax[1].set_xlim([0.0, 1.0])
         ax[1].set_ylim([0.0, 1.05])
         ax[1].set_xlabel('Taxa de Falso Positivo (FPR)')
         ax[1].set_ylabel('Taxa de Verdadeiro Positivo (TPR)')
         ax[1].legend(loc="lower right")
+        
+        # Formatação Eixo PR (ax[2])
+        ax[2].set_xlim([0.0, 1.0])
+        ax[2].set_ylim([0.0, 1.05])
+        ax[2].set_xlabel('Recall (TPR)')
+        ax[2].set_ylabel('Precision')
+        ax[2].legend(loc="lower left")
+        
     else:
-        ax[1].text(0.5, 0.5, 'y_proba não fornecido', ha='center', va='center')
+        # Se probabilidade não for passada, desabilita os gráficos 2 e 3
+        ax[1].text(0.5, 0.5, 'y_proba não fornecido\nCurva ROC indisponível', ha='center', va='center')
+        ax[2].text(0.5, 0.5, 'y_proba não fornecido\nCurva PR indisponível', ha='center', va='center')
         results["ROC AUC"] = None
+        results["Average Precision"] = None
 
     plt.tight_layout()
     plt.show()
