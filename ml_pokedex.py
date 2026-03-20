@@ -209,34 +209,45 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import label_binarize
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, confusion_matrix,
+    roc_curve, auc, roc_auc_score, precision_recall_curve, average_precision_score
+)
+from sklearn.preprocessing import label_binarize
+
 def summarize_model_performance(
     y_test, 
     y_pred, 
     y_proba=None, 
     multi_class=False, 
     threshold_used=0.5,
-    class_names=None
+    class_names=None,
+    n_bins=10 # NOVO: Quantidade de quebras (10 = decis, 4 = quartis, etc.)
 ):
     """
-    Calcula métricas e gera gráficos de Matriz de Confusão, Curva ROC e Curva Precision-Recall.
+    Calcula métricas, gera gráficos (Matriz de Confusão, Curva ROC e Curva PR) 
+    e tabela de KS/Gini por quantis.
     """
     results = {}
 
     if class_names is not None:
         class_names = list(class_names)
     
-    # --- Cálculo de Métricas ---
+    # --- Cálculo de Métricas Iniciais ---
     results["Accuracy"] = accuracy_score(y_test, y_pred)
     avg_type = 'weighted' if multi_class else 'binary'
-    results["Precision"] = precision_score(y_test, y_pred, average=avg_type)
-    results["Recall"] = recall_score(y_test, y_pred, average=avg_type)
-    results["F1 Score"] = f1_score(y_test, y_pred, average=avg_type)
+    results["Precision"] = precision_score(y_test, y_pred, average=avg_type, zero_division=0)
+    results["Recall"] = recall_score(y_test, y_pred, average=avg_type, zero_division=0)
+    results["F1 Score"] = f1_score(y_test, y_pred, average=avg_type, zero_division=0)
     
     cm = confusion_matrix(y_test, y_pred)
     results["Confusion Matrix"] = cm
 
     # --- Setup dos Gráficos ---
-    # Alterado para 3 colunas para acomodar a Curva PR
     fig, ax = plt.subplots(1, 3, figsize=(20, 5))
 
     # 1. Plot da Matriz de Confusão
@@ -247,7 +258,7 @@ def summarize_model_performance(
     ax[0].set_xlabel('Predito')
     ax[0].set_ylabel('Real')
 
-    # 2. ROC AUC e Curva PR
+    # 2. ROC, PR, Gini e KS
     if y_proba is not None:
         if multi_class:
             # Lógica Multiclasse (One-vs-Rest)
@@ -270,7 +281,9 @@ def summarize_model_performance(
                 ax[2].plot(recalls[i], precisions[i], label=f'Classe {classes[i]} (AP = {pr_auc[i]:.2f})')
             
             # Métricas Globais Multiclasse
-            results["ROC AUC"] = roc_auc_score(y_test, y_proba, multi_class="ovr", average="weighted")
+            auc_global = roc_auc_score(y_test, y_proba, multi_class="ovr", average="weighted")
+            results["ROC AUC"] = auc_global
+            results["Gini"] = (2 * auc_global) - 1 # Gini Global
             results["Average Precision"] = average_precision_score(y_test_bin, y_proba, average="weighted")
             
             ax[1].set_title(f'ROC Curve (Weighted AUC: {results["ROC AUC"]:.2f})')
@@ -279,15 +292,16 @@ def summarize_model_performance(
         else:
             # Lógica Binária
             
-            # Curva ROC
+            # Curva ROC e Gini Global
             fpr, tpr, _ = roc_curve(y_test, y_proba)
             roc_auc = auc(fpr, tpr)
             results["ROC AUC"] = roc_auc
+            results["Gini"] = (2 * roc_auc) - 1
             
             ax[1].plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
-            ax[1].set_title('Curva ROC')
+            ax[1].set_title(f'Curva ROC (Gini = {results["Gini"]:.2f})')
 
-            # Curva Precision-Recall e Threshold
+            # Curva Precision-Recall
             precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba)
             ap_score = average_precision_score(y_test, y_proba)
             results["Average Precision"] = ap_score
@@ -300,6 +314,38 @@ def summarize_model_performance(
             best_index = np.argmax(f1_scores)
             results["Best Threshold (F1)"] = thresholds[best_index] if best_index < len(thresholds) else 1.0
             results["Threshold Used"] = threshold_used
+
+            # --- Tabela de KS e Gini por Decis (Apenas Binário) ---
+            df = pd.DataFrame({'target': y_test, 'proba': y_proba})
+            
+            # Adiciona um ruído ínfimo para evitar erro de quantis com muitas probabilidades iguais (ex: modelos de árvore)
+            df['proba'] = df['proba'] + np.random.uniform(0, 1e-9, size=len(df))
+            
+            # Criação dos bins (decis por padrão)
+            df['bin'] = pd.qcut(df['proba'], q=n_bins, labels=False, duplicates='drop')
+            
+            # Agrupamento e cálculos
+            ks_table = df.groupby('bin', observed=False).agg(
+                min_prob=('proba', 'min'),
+                max_prob=('proba', 'max'),
+                total=('target', 'count'),
+                events=('target', 'sum')
+            ).sort_values(by='min_prob', ascending=False).reset_index(drop=True)
+            
+            ks_table['non_events'] = ks_table['total'] - ks_table['events']
+            ks_table['event_rate'] = ks_table['events'] / ks_table['total']
+            
+            ks_table['cum_events'] = ks_table['events'].cumsum()
+            ks_table['cum_non_events'] = ks_table['non_events'].cumsum()
+            
+            ks_table['cum_pct_events'] = ks_table['cum_events'] / ks_table['events'].sum()
+            ks_table['cum_pct_non_events'] = ks_table['cum_non_events'] / ks_table['non_events'].sum()
+            
+            # Cálculo do KS (Max dif. entre pct cumulativo de eventos e não eventos)
+            ks_table['KS'] = np.abs(ks_table['cum_pct_events'] - ks_table['cum_pct_non_events']) * 100
+            
+            results["KS_Table"] = ks_table
+            results["Max_KS"] = ks_table['KS'].max()
 
         # Formatação Eixo ROC (ax[1])
         ax[1].plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
@@ -317,11 +363,9 @@ def summarize_model_performance(
         ax[2].legend(loc="lower left")
         
     else:
-        # Se probabilidade não for passada, desabilita os gráficos 2 e 3
         ax[1].text(0.5, 0.5, 'y_proba não fornecido\nCurva ROC indisponível', ha='center', va='center')
         ax[2].text(0.5, 0.5, 'y_proba não fornecido\nCurva PR indisponível', ha='center', va='center')
-        results["ROC AUC"] = None
-        results["Average Precision"] = None
+        results["ROC AUC"], results["Gini"], results["Average Precision"], results["KS_Table"], results["Max_KS"] = None, None, None, None, None
 
     plt.tight_layout()
     plt.show()
