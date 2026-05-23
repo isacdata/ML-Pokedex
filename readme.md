@@ -40,8 +40,9 @@ python -m venv .env
 source .env/bin/activate  # Para Linux/Mac
 # ou
 .env\Scripts\activate     # Para Windows
+```
 
-Instale as bibliotecas principais do projeto:
+### Instale as bibliotecas principais do projeto:
 pip install pandas numpy scikit-learn lightgbm optuna matplotlib seaborn jupyter
 
 ### Ordem de Execução
@@ -50,8 +51,6 @@ pip install pandas numpy scikit-learn lightgbm optuna matplotlib seaborn jupyter
 2. Inicie pelo **`0.criando_datasets.ipynb`** para processar e gerar os *DataFrames* base (treino e validação).
 3. Vá para o **`1.modeling.ipynb`**. O Optuna orquestrará o LightGBM, testando dezenas de hiperparâmetros. Ao final deste passo, o arquivo `melhor_modelo_lgbm.pkl` guardará a inteligência gerada.
 4. Finalize com o **`2.evaluating_results.ipynb`**. Aqui você fará as predições no conjunto `dataset_full` (ou conjunto de teste isolado), validando a evolução do desempenho temporal e identificando as variáveis-chave (como `population`, `data_products_score`, etc.) que mais impactam no resultado.
-
----
 
 ## 📈 Destaques Analíticos e Técnicos
 
