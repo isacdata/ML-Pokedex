@@ -43,7 +43,11 @@ source .env/bin/activate  # Para Linux/Mac
 ```
 
 ### Instale as bibliotecas principais do projeto:
+```bash
 pip install pandas numpy scikit-learn lightgbm optuna matplotlib seaborn jupyter
+```
+
+---
 
 ### Ordem de Execução
 
