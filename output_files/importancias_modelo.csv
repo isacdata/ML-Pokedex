@@ -1,0 +1,10 @@
+Feature,Importancia,Percentual (%),Percentual Acumulado (%)
+population,12873,45.65,45.65
+data_products_score,8019,28.44,74.09
+data_sources_score,1761,6.24,80.33
+data_use_score,1660,5.89,86.22
+year,1131,4.01,90.23
+region,1011,3.59,93.82
+data_infrastructure_score,884,3.13,96.95
+overall_score,442,1.57,98.52
+data_services_score,418,1.48,100.0
