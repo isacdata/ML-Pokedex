@@ -1,6 +1,6 @@
 # 📊 Previsão de Renda e Análise Temporal (Income Prediction Model)
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12.2%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![LightGBM](https://img.shields.io/badge/LightGBM-4.0%2B-orange?style=for-the-badge&logo=lightgbm)
 ![Optuna](https://img.shields.io/badge/Optuna-Hyperparameter_Tuning-blueviolet?style=for-the-badge&logo=optuna)
 ![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-Machine_Learning-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
